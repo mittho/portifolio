@@ -2,6 +2,7 @@ import sys
 import json
 import os
 import winreg
+import logging
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QWidget, QCalendarWidget,
     QPushButton, QTextEdit, QMessageBox, QLabel, QListWidget, QMenuBar, QMenu
@@ -9,13 +10,23 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import QDate, Qt, QTimer
 from PyQt6.QtGui import QTextCharFormat, QColor, QPixmap, QIcon, QAction
 
+# Configuração de logging
+logging.basicConfig(
+    filename='calendario.log',
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
 # Configuração para suporte a High DPI
 QApplication.setHighDpiScaleFactorRoundingPolicy(
     Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
 )
 
-# Nome do arquivo JSON para salvar eventos
-EVENTS_FILE = "eventos.json"
+# Define caminhos absolutos
+APP_DIR = os.path.dirname(os.path.abspath(sys.argv[0]))
+EVENTS_FILE = os.path.join(APP_DIR, "eventos.json")
+ICON_FILE = os.path.join(APP_DIR, "icone.ico")
+LOGO_FILE = os.path.join(APP_DIR, "logo.png")
 
 # Feriados nacionais e estaduais do Rio de Janeiro em 2025
 FERIADOS = {
@@ -34,7 +45,6 @@ FERIADOS = {
     "2025-12-25": "Natal"
 }
 
-# Estilos CSS para Dark e Light Mode
 # Estilos CSS para Dark e Light Mode
 DARK_STYLE = """
     QWidget {
@@ -152,71 +162,106 @@ LIGHT_STYLE = """
 
 class CalendarioEventos(QMainWindow):
     def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Calendário de Eventos")
-        self.setGeometry(100, 100, 600, 700)
+        try:
+            super().__init__()
+            self.setWindowTitle("Calendário de Eventos")
+            self.setGeometry(100, 100, 600, 700)
 
-        # Definir ícone da janela
-        self.setWindowIcon(QIcon("icone.ico"))  # Substitua "icone.ico" pelo caminho do seu arquivo .ico
+            # Verificar e criar diretório se necessário
+            self.verificar_diretorio()
 
-        # Layout principal
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
-        self.layout = QVBoxLayout(self.central_widget)
+            # Definir ícone da janela
+            if os.path.exists(ICON_FILE):
+                self.setWindowIcon(QIcon(ICON_FILE))
+                logging.info("Ícone carregado com sucesso")
+            else:
+                logging.warning(f"Ícone não encontrado em: {ICON_FILE}")
 
-        # Menu para alternar entre Dark e Light Mode
-        self.criar_menu()
+            # Layout principal
+            self.central_widget = QWidget()
+            self.setCentralWidget(self.central_widget)
+            self.layout = QVBoxLayout(self.central_widget)
 
-        # Adicionar logo
-        self.logo = QLabel(self)
-        self.logo.setPixmap(QPixmap("logo.png").scaled(200, 100, Qt.AspectRatioMode.KeepAspectRatio))
-        self.logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.layout.addWidget(self.logo)
+            # Menu para alternar entre Dark e Light Mode
+            self.criar_menu()
 
-        # Widget do Calendário
-        self.calendario = QCalendarWidget()
-        self.calendario.setGridVisible(True)
-        self.calendario.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)  # Remove números da semana
-        self.calendario.clicked.connect(self.mostrar_evento)
-        self.layout.addWidget(self.calendario)
+            # Adicionar logo
+            self.logo = QLabel(self)
+            if os.path.exists(LOGO_FILE):
+                self.logo.setPixmap(QPixmap(LOGO_FILE).scaled(200, 100, Qt.AspectRatioMode.KeepAspectRatio))
+            else:
+                self.logo.setText("Calendário de Eventos")
+            self.logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.layout.addWidget(self.logo)
 
-        # Caixa de texto para eventos
-        self.texto_evento = QTextEdit()
-        self.layout.addWidget(self.texto_evento)
+            # Widget do Calendário
+            self.calendario = QCalendarWidget()
+            self.calendario.setGridVisible(True)
+            self.calendario.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)
+            self.calendario.clicked.connect(self.mostrar_evento)
+            self.layout.addWidget(self.calendario)
 
-        # Botão para salvar evento
-        self.botao_salvar = QPushButton("Salvar Evento")
-        self.botao_salvar.clicked.connect(self.salvar_evento)
-        self.layout.addWidget(self.botao_salvar)
+            # Caixa de texto para eventos
+            self.texto_evento = QTextEdit()
+            self.layout.addWidget(self.texto_evento)
 
-        # Botão para apagar evento
-        self.botao_apagar = QPushButton("Apagar Evento")
-        self.botao_apagar.clicked.connect(self.apagar_evento)
-        self.layout.addWidget(self.botao_apagar)
+            # Botões
+            self.botao_salvar = QPushButton("Salvar Evento")
+            self.botao_salvar.clicked.connect(self.salvar_evento)
+            self.layout.addWidget(self.botao_salvar)
 
-        # Lista de feriados
-        self.lista_feriados = QListWidget()
-        self.lista_feriados.setFixedHeight(150)
-        self.layout.addWidget(QLabel("Feriados em 2025:"))
-        self.layout.addWidget(self.lista_feriados)
+            self.botao_apagar = QPushButton("Apagar Evento")
+            self.botao_apagar.clicked.connect(self.apagar_evento)
+            self.layout.addWidget(self.botao_apagar)
 
-        # Carregar eventos salvos
-        self.eventos = self.carregar_eventos()
+            # Lista de feriados
+            self.lista_feriados = QListWidget()
+            self.lista_feriados.setFixedHeight(150)
+            self.layout.addWidget(QLabel("Feriados em 2025:"))
+            self.layout.addWidget(self.lista_feriados)
 
-        # Destacar feriados e eventos
-        self.destacar_dias()
+            # Carregar eventos salvos
+            self.eventos = self.carregar_eventos()
 
-        # Exibir feriados na lista
-        self.exibir_feriados()
+            # Destacar feriados e eventos
+            self.destacar_dias()
 
-        # Verificar eventos ao iniciar
-        self.verificar_eventos_hoje()
+            # Exibir feriados na lista
+            self.exibir_feriados()
 
-        # Configurar inicialização automática com o Windows
-        self.configurar_inicializacao_automatica()
+            # Verificar eventos ao iniciar
+            self.verificar_eventos_hoje()
 
-        # Definir tema padrão (Light Mode)
-        self.definir_tema("Light")
+            # Timer para verificar eventos periodicamente
+            self.timer = QTimer(self)
+            self.timer.timeout.connect(self.verificar_eventos_hoje)
+            self.timer.start(3600000)  # Verifica a cada hora
+
+            # Configurar inicialização automática
+            self.configurar_inicializacao_automatica()
+
+            # Definir tema padrão
+            self.definir_tema("Light")
+
+            logging.info("Aplicação iniciada com sucesso")
+
+        except Exception as e:
+            logging.error(f"Erro na inicialização: {str(e)}")
+            QMessageBox.critical(self, "Erro", f"Erro ao iniciar aplicativo: {str(e)}")
+
+    def verificar_diretorio(self):
+        """Verifica se o diretório e arquivos necessários existem."""
+        try:
+            if not os.path.exists(APP_DIR):
+                os.makedirs(APP_DIR)
+                logging.info(f"Diretório criado: {APP_DIR}")
+            
+            if not os.path.exists(EVENTS_FILE):
+                with open(EVENTS_FILE, 'w', encoding='utf-8') as f:
+                    json.dump({}, f)
+                logging.info(f"Arquivo de eventos criado: {EVENTS_FILE}")
+        except Exception as e:
+            logging.error(f"Erro ao verificar diretório: {str(e)}")
 
     def criar_menu(self):
         """Cria um menu para alternar entre Dark e Light Mode."""
@@ -244,15 +289,26 @@ class CalendarioEventos(QMainWindow):
     def carregar_eventos(self):
         """Carrega eventos do arquivo JSON."""
         try:
-            with open(EVENTS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except FileNotFoundError:
+            logging.info(f"Tentando carregar eventos de: {EVENTS_FILE}")
+            if os.path.exists(EVENTS_FILE):
+                with open(EVENTS_FILE, "r", encoding="utf-8") as f:
+                    dados = json.load(f)
+                    logging.info("Eventos carregados com sucesso")
+                    return dados
+            return {}
+        except Exception as e:
+            logging.error(f"Erro ao carregar eventos: {str(e)}")
             return {}
 
     def salvar_eventos(self):
         """Salva eventos no arquivo JSON."""
-        with open(EVENTS_FILE, "w", encoding="utf-8") as f:
-            json.dump(self.eventos, f, indent=4, ensure_ascii=False)
+        try:
+            with open(EVENTS_FILE, "w", encoding="utf-8") as f:
+                json.dump(self.eventos, f, indent=4, ensure_ascii=False)
+            logging.info("Eventos salvos com sucesso")
+        except Exception as e:
+            logging.error(f"Erro ao salvar eventos: {str(e)}")
+            QMessageBox.warning(self, "Erro", f"Erro ao salvar eventos: {str(e)}")
 
     def mostrar_evento(self):
         """Exibe o evento do dia selecionado."""
@@ -268,7 +324,6 @@ class CalendarioEventos(QMainWindow):
         if evento_texto:
             self.eventos[data_selecionada] = evento_texto
         else:
-            # Se o evento estiver em branco, remove a data do dicionário
             self.eventos.pop(data_selecionada, None)
 
         self.salvar_eventos()
