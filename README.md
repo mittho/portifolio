@@ -17,7 +17,7 @@ Sou um profissional com experiência em design gráfico, automação, marketing 
 ## 📩 Contato
 Se quiser trocar uma ideia ou colaborar em algum projeto, me chame!
 
-🔗 **LinkedIn:** [Seu Perfil](https://www.linkedin.com/in/ot%C3%A1vio-catinin-9ab890b1/)
+🔗 **LinkedIn:** [Meu Perfil](https://www.linkedin.com/in/ot%C3%A1vio-catinin-9ab890b1/)
 
 ---
 
